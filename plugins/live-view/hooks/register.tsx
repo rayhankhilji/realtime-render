@@ -200,8 +200,21 @@ async function addFrame($: $, f: Omit<Frame, 'id' | 'at'> & { id?: number }) {
   })
   if (!opened) {
     opened = true
-    void $.ui.open({ id: PANE, title: 'Live View' })
+    void openPane($, 'first frame')
   }
+}
+
+
+// Opens the pane and records whether a surface actually drew it. A pane
+// opened by the plugin itself (not by the person) may wait undrawn, so say
+// how to open it.
+const diag: string[] = []
+async function openPane($: $, why: string) {
+  const r = await $.ui.open({ id: PANE, title: 'Live View' }).catch((err) => ({ isPlaced: false as const, reason: String(err) }))
+  diag.push(`${new Date().toISOString()} open(${why}) -> ${r.isPlaced ? 'placed' : `not placed: ${r.reason}`}`)
+  if (dataDir) void $.fs.write(`${dataDir}/debug.log`, diag.slice(-50).join('\n') + '\n').catch(() => {})
+  if (!r.isPlaced && why !== 'command') $.ui.toast('Live View has a new frame: type /live-view to open the pane')
+  return r
 }
 
 // What the agent's edit looked like, for the code under the picture.
@@ -241,9 +254,8 @@ export const register: Register = (on) => {
     })
     // Warm the renderer now so the first frame is quick; failures surface later.
     $.clock.after(1, () => void ensureRenderer($).catch(() => {}))
-    if (e.surface === 'desktop') {
-      opened = true
-      void $.ui.open({ id: PANE, title: 'Live View' })
+    if (e.surface !== 'terminal') {
+      $.clock.after(1, () => void openPane($, `session start (${e.surface ?? 'no surface'})`))
     }
     return next(e)
   })
@@ -282,11 +294,11 @@ export const register: Register = (on) => {
   on('command.run', { command: 'live-view' }, async ($, e) => {
     const [sub = '', ...rest] = e.args.trim().split(/\s+/)
     const arg = rest.join(' ')
-    const open = () => $.ui.open({ id: PANE, title: 'Live View' })
+    const open = () => openPane($, 'command')
     switch (sub) {
       case '':
-        await open()
-        return { text: 'Live View is open.' }
+        const r = await open()
+        return { text: r.isPlaced ? 'Live View is open.' : `Live View could not be shown here: ${r.reason}` }
       case 'url': {
         if (!/^https?:\/\//.test(arg)) return { text: 'Give a full address, like /live-view url http://localhost:5173' }
         await update($, pin, () => ({ url: arg }))
