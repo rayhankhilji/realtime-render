@@ -286,6 +286,13 @@ export const register: Register = (on) => {
     return ran
   }).catch(($, e, next) => next(e)) // never let the viewer get in the agent's way
 
+  // A client that draws (the desktop app, a phone) joined: show the pane there.
+  on('session.attach', async ($, e, next) => {
+    const r = await next(e)
+    if (e.surface !== 'terminal') $.clock.after(1, () => void openPane($, `attach (${e.surface})`))
+    return r
+  })
+
   on('turn.complete', async ($, e, next) => {
     if (!running) await update($, activity, () => null)
     return next(e)
