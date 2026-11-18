@@ -153,11 +153,12 @@ async function finish(page, pngBase64, prev) {
     while (url.length - 23 > maxB64 && q > 0.2) { q -= 0.1; url = c.toDataURL('image/jpeg', q); }
     const jpeg = url.slice('data:image/jpeg;base64,'.length);
 
-    // Change detection on a coarse grid: robust to JPEG noise and cheap.
+    // Change detection on a coarse grid, JPEG against JPEG so compression
+    // noise cancels out, keeping the largest connected patch of change.
     let bbox = null;
     if (prev) {
       try {
-        const old = await load('data:image/jpeg;base64,' + prev);
+        const [now, old] = await Promise.all([load(url), load('data:image/jpeg;base64,' + prev)]);
         const GW = 72, GH = 45;
         const sample = (im) => {
           const s = document.createElement('canvas');
@@ -166,14 +167,36 @@ async function finish(page, pngBase64, prev) {
           sg.drawImage(im, 0, 0, GW, GH);
           return sg.getImageData(0, 0, GW, GH).data;
         };
-        const a = sample(img), b = sample(old);
-        let x0 = GW, y0 = GH, x1 = -1, y1 = -1, n = 0;
-        for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
-          const i = (y * GW + x) * 4;
-          const d = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
-          if (d > 48) { n++; if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+        const a = sample(now), b = sample(old);
+        const hit = new Uint8Array(GW * GH);
+        for (let i = 0; i < GW * GH; i++) {
+          const d = Math.abs(a[i * 4] - b[i * 4]) + Math.abs(a[i * 4 + 1] - b[i * 4 + 1]) + Math.abs(a[i * 4 + 2] - b[i * 4 + 2]);
+          if (d > 60) hit[i] = 1;
         }
-        if (n > 0) bbox = [x0 / GW, y0 / GH, (x1 + 1 - x0) / GW, (y1 + 1 - y0) / GH, n / (GW * GH)];
+        // Connected patches (8-neighbour, bridging one-cell gaps).
+        const seen = new Uint8Array(GW * GH);
+        let best = null, total = 0;
+        for (let start = 0; start < GW * GH; start++) {
+          if (!hit[start] || seen[start]) continue;
+          const stack = [start];
+          seen[start] = 1;
+          let n = 0, x0 = GW, y0 = GH, x1 = -1, y1 = -1;
+          while (stack.length) {
+            const i = stack.pop();
+            const x = i % GW, y = (i / GW) | 0;
+            n++;
+            if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y;
+            for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+              const nx = x + dx, ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
+              const j = ny * GW + nx;
+              if (hit[j] && !seen[j]) { seen[j] = 1; stack.push(j); }
+            }
+          }
+          total += n;
+          if (n >= 3 && (!best || n > best.n)) best = { n, x0, y0, x1, y1 };
+        }
+        if (best) bbox = [best.x0 / GW, best.y0 / GH, (best.x1 + 1 - best.x0) / GW, (best.y1 + 1 - best.y0) / GH, total / (GW * GH)];
       } catch {}
     }
     return { jpeg, width: w, height: h, bbox };
