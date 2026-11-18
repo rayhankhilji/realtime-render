@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: grid; place-items: center;
+    background: #1b1d22 repeating-conic-gradient(#23262c 0 25%, #1b1d22 0 50%) 0 0 / 24px 24px;
+  }
+  img, video { max-width: 92vw; max-height: 92vh; object-fit: contain; box-shadow: 0 8px 40px #0008; }
+</style>
+<body>
+<script>
+  const q = new URLSearchParams(location.search);
+  const src = q.get('src');
+  const fail = (m) => { window.__error = m; };
+  if (q.get('type') === 'video') {
+    const v = document.createElement('video');
+    v.muted = true; v.preload = 'auto'; v.src = src;
+    v.onloadedmetadata = () => { v.currentTime = Math.min(v.duration / 2, 2); };
+    v.onseeked = () => { window.__ready = true; };
+    v.onerror = () => fail('could not play this video');
+    document.body.append(v);
+  } else {
+    const i = new Image();
+    i.onload = () => { window.__ready = true; };
+    i.onerror = () => fail('could not open this image');
+    i.src = src;
+    document.body.append(i);
+  }
+</script>

@@ -1,0 +1,10 @@
+{
+  "name": "live-view-renderer",
+  "private": true,
+  "type": "module",
+  "description": "Turns whatever an agent is building into frames for the Live View pane.",
+  "dependencies": {
+    "playwright-core": "1.49.1",
+    "three": "0.170.0"
+  }
+}

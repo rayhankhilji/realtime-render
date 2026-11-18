@@ -1,0 +1,11 @@
+{
+  "name": "realtime-render",
+  "owner": { "name": "rayhankhilji" },
+  "plugins": [
+    {
+      "name": "live-view",
+      "source": "./plugins/live-view",
+      "description": "A live pane beside the Claude Code chat that shows what the agent is building as it builds it."
+    }
+  ]
+}

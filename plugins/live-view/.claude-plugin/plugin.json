@@ -1,0 +1,6 @@
+{
+  "name": "live-view",
+  "version": "0.1.0",
+  "description": "A live pane beside the chat that shows what the agent is building as it builds it: web pages, Three.js scenes, images, GIFs, 3D models, Blender files and code, with the agent's cursor and a timeline.",
+  "types": "./types/index.d.ts"
+}

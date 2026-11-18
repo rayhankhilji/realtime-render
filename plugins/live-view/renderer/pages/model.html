@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1d22; } canvas { display: block; }</style>
+<script type="importmap">
+{ "imports": { "three": "/three/build/three.module.js", "three/addons/": "/three/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
+import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+try {
+  const src = new URLSearchParams(location.search).get('src');
+  const ext = decodeURIComponent(src).split('.').pop().toLowerCase();
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  document.body.append(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#1b1d22');
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const sun = new THREE.DirectionalLight('#ffffff', 1.6);
+  sun.position.set(3, 6, 4);
+  scene.add(sun, new THREE.HemisphereLight('#dfe8ff', '#30261c', 0.6));
+
+  const material = new THREE.MeshStandardMaterial({ color: '#b9c2cf', roughness: 0.55, metalness: 0.1 });
+  const meshFrom = (geo) => { geo.computeVertexNormals(); return new THREE.Mesh(geo, material); };
+  const loaded = await ({
+    glb: () => new GLTFLoader().loadAsync(src).then((g) => g.scene),
+    gltf: () => new GLTFLoader().loadAsync(src).then((g) => g.scene),
+    obj: () => new OBJLoader().loadAsync(src).then((o) => { o.traverse((c) => { if (c.isMesh && !c.material?.map) c.material = material; }); return o; }),
+    stl: () => new STLLoader().loadAsync(src).then(meshFrom),
+    ply: () => new PLYLoader().loadAsync(src).then(meshFrom),
+    fbx: () => new FBXLoader().loadAsync(src),
+  }[ext] ?? (() => { throw new Error('unknown model type .' + ext); }))();
+
+  // Frame the model from a three-quarter view, standing on a grid.
+  const box = new THREE.Box3().setFromObject(loaded);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const radius = Math.max(size.length() / 2, 1e-3);
+  loaded.position.sub(new THREE.Vector3(center.x, box.min.y, center.z));
+  scene.add(loaded);
+
+  const grid = new THREE.GridHelper(radius * 6, 24, '#4a505c', '#2c3038');
+  scene.add(grid);
+
+  const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, radius / 100, radius * 100);
+  const dist = radius / Math.sin(THREE.MathUtils.degToRad(20)) * 1.05;
+  camera.position.set(dist * 0.62, size.y / 2 + dist * 0.42, dist * 0.68);
+  camera.lookAt(0, size.y / 2, 0);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(() => { renderer.render(scene, camera); window.__ready = true; });
+} catch (err) {
+  window.__error = 'could not open this model: ' + (err?.message ?? err);
+}
+</script>
